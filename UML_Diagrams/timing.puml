@@ -1,0 +1,83 @@
+@startuml
+title Transaction Latency Budget (Iteration 1)
+skinparam backgroundColor white
+
+' 1. INCREASED SCALE: This fixes the horizontal overlapping
+' 1 ms is now 15 pixels, giving plenty of room for text
+scale 1 as 15 pixels
+
+skinparam timingDiagram {
+    BackgroundColor #F9F9F9
+    ArrowColor #2C3E50
+    LineColor #2C3E50
+}
+
+' Define Participants
+robust "Client" as Client
+robust "HTTP Handler" as Handler
+robust "Memory Store" as Store
+
+' Initial State
+@0
+Client is Idle
+Handler is Idle
+Store is Idle
+
+' T=0: Client sends request
+@0
+Client is "Sending" #A9D0F5
+Client -> Handler@+10 : Network (10ms)
+
+' T=10: Handler receives and parses
+@10
+Client is "Waiting" #E6E6E6
+Handler is "Parsing" #A9F5A9
+
+' T=15: Handler validates
+@15
+Handler is "Validating" #A9F5A9
+Handler -> Store@+1 : Internal Call
+
+' T=16: Critical Section Starts
+@16
+Handler is "Waiting" #E6E6E6
+Store is "Acquire Lock" #F5A9A9
+
+' T=17: Lock Acquired
+@17
+Store is "Writing (Critical)" #FF5555
+
+' T=20: Lock Released
+@20
+Store is "Release Lock" #F5A9A9
+Store -> Handler@+1 : Success
+
+' T=21: Handler builds response
+@21
+Store is Idle
+Handler is "Building Resp" #A9F5A9
+
+' T=25: Handler sends response
+@25
+Handler is Idle
+Handler -> Client@+10 : Network (10ms)
+
+' T=35: Client receives response
+@35
+Client is "Received" #A9D0F5
+@36
+Client is Idle
+
+' Visual constraints (Moved label to legend to prevent overlap)
+highlight 16 to 20 #FFEEEE;line:Red : Mutex (4ms)
+highlight 0 to 35 #FAFAFA;line:Black : Total RTT (35ms)
+
+legend right
+    | Color | Meaning |
+    | <#A9D0F5> | Client Activity |
+    | <#A9F5A9> | Handler Processing |
+    | <#FF5555> | Critical Section (Store) |
+    | <#E6E6E6> | Waiting/Idle |
+end legend
+
+@enduml

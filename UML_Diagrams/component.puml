@@ -1,0 +1,55 @@
+@startuml
+title Component Diagram - V2.0
+skinparam linetype ortho
+skinparam componentStyle uml2
+skinparam backgroundColor white
+
+' Style settings
+skinparam component {
+    BackgroundColor White
+    BorderColor Black
+    ArrowColor Black
+}
+skinparam interface {
+    BackgroundColor White
+    BorderColor Black
+}
+
+' 1. External Component
+component "Client Application\n(Postman/Test Script)" as Client
+
+' 2. The Main System Container
+component "RTTH Node (Go Process)" as Node {
+    
+    ' Port definition
+    port "Port 8080" as p1
+
+    ' 3. Internal Modules (Layers)
+    component "API Module\n(Handlers & Routing)" as API
+    component "Core Logic Module\n(Validation & Transaction)" as Core
+    component "Storage Module\n(In-Memory Store)" as Store
+
+    ' 4. Interfaces (Contracts)
+    interface "HTTP Endpoint" as IHTTP
+    interface "TxService" as ITx
+    interface "LogStore" as IStore
+}
+
+' 5. Wiring / Relationships
+
+' Client connects to the physical port
+Client ..> p1 : HTTP/JSON
+
+' Port connects to the API Module via HTTP Interface
+p1 -- IHTTP
+IHTTP -- API
+
+' API Layer requires the Core Logic Layer
+API --( ITx
+ITx -- Core
+
+' Core Logic Layer requires the Storage Layer
+Core --( IStore
+IStore -- Store
+
+@enduml

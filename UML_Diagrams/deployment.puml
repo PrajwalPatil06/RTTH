@@ -1,0 +1,49 @@
+@startuml
+title Deployment Diagram - Iteration 1
+skinparam linetype ortho
+skinparam backgroundColor white
+skinparam handwritten false
+
+' Style settings
+skinparam node {
+    BackgroundColor White
+    BorderColor Black
+    ArrowColor Black
+}
+skinparam artifact {
+    BackgroundColor White
+    BorderColor Black
+}
+skinparam component {
+    BackgroundColor White
+    BorderColor Black
+}
+
+' 1. Client Node (The source of requests)
+node "Client Workstation" as ClientNode {
+    artifact "Test Script\n(Postman / curl)" as TestTool
+}
+
+' 2. Server Node (The deployment target)
+node "Linux Server\n(Ubuntu 22.04 LTS)" as ServerNode {
+    
+    ' The Execution Environment
+    node "Operating System Process" as OSProc {
+        
+        ' The Executable File (Build Artifact)
+        artifact "rtth-server-v0.1\n(Go Binary)" as Binary
+        
+        ' The Running Instance
+        component "RTTH Service\n(Running on :8080)" as Service
+    }
+}
+
+' 3. Relationships
+
+' Client connects to Server via Network
+TestTool -- ServerNode : TCP/IP (HTTP 1.1)
+
+' The Service is instantiated from the Binary
+Binary ..> Service : <<manifest>>
+
+@enduml
