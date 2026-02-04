@@ -1,0 +1,66 @@
+@startuml
+title Sequence Diagram - V2.0
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+skinparam backgroundColor white
+skinparam handwritten false
+
+' Style settings
+skinparam participant {
+    BackgroundColor White
+    BorderColor Black
+    ArrowColor Black
+}
+skinparam actor {
+    BackgroundColor White
+    BorderColor Black
+}
+
+' Actors and Participants
+actor "Client" as Client
+participant "HTTPHandler" as Handler
+participant "Transaction" as Tx
+participant "MemoryStore" as Store
+
+' Flow Start
+Client -> Handler: POST /transaction\n{payload: "A->B 10"}
+activate Handler
+
+' 1. Parsing Phase
+Handler -> Handler: Parse JSON Body
+    
+alt Parsing Error
+    Handler --> Client: 400 Bad Request\n(Invalid JSON)
+else Parsing Success
+
+    ' 2. Validation Phase
+    Handler -> Tx: Validate()
+    activate Tx
+    
+    alt Validation Failed
+        Tx --> Handler: Error (Invalid Payload)
+        deactivate Tx
+        Handler --> Client: 422 Unprocessable Entity
+    else Validation Success
+        Tx --> Handler: OK
+        deactivate Tx
+
+        ' 3. Storage Phase
+        Handler -> Store: Append(Transaction)
+        activate Store
+        
+        Store -> Store: Lock Mutex
+        Store -> Store: Add to Slice
+        Store -> Store: Unlock Mutex
+        
+        Store --> Handler: Success (Index: 1)
+        deactivate Store
+
+        ' 4. Response Phase
+        Handler --> Client: 200 OK\n{id: "uuid", status: "committed"}
+    end
+end
+
+deactivate Handler
+
+@enduml

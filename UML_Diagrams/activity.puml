@@ -1,0 +1,61 @@
+@startuml
+title Activity Diagram - Transaction Processing Flow
+skinparam linetype ortho
+skinparam backgroundColor white
+skinparam handwritten false
+
+' Style settings
+skinparam activity {
+    BackgroundColor White
+    BorderColor Black
+    ArrowColor Black
+}
+skinparam partition {
+    BackgroundColor White
+    BorderColor Black
+}
+
+' Define Swimlanes (Partitions)
+|#F9F9F9|HTTP Handler|
+start
+:Receive HTTP POST Request;
+
+:Parse JSON Payload;
+
+if (Is JSON Valid?) then (No)
+    :Set HTTP Status 400 (Bad Request);
+    :Send Error Response;
+    stop
+else (Yes)
+    :Extract Transaction Data;
+    :Validate Business Rules;
+    
+    if (Is Payload Valid?) then (No)
+        :Set HTTP Status 422 (Unprocessable);
+        :Send Validation Error;
+        stop
+    else (Yes)
+        :Create Transaction Object;
+        
+        ' Handover to Storage Layer
+        |Memory Store|
+        
+        partition "Critical Section (Thread Safety)" {
+            :Acquire Mutex (Lock);
+            :Generate Unique ID (UUID);
+            :Append Transaction to Log Slice;
+            :Release Mutex (Unlock);
+        }
+        
+        :Return Success Signal;
+        
+        ' Return to Handler
+        |HTTP Handler|
+        :Construct JSON Response;
+        :Set HTTP Status 200 (OK);
+        :Send Success Response;
+        stop
+    endif
+endif
+
+@enduml

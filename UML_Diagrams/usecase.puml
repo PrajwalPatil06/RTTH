@@ -1,0 +1,38 @@
+@startuml
+title Use Case Diagram - V2.0
+left to right direction
+
+' Style settings for a cleaner look
+skinparam packageStyle rectangle
+skinparam usecase {
+    BackgroundColor White
+    BorderColor Black
+    ArrowColor Black
+}
+skinparam actorStyle awesome
+
+actor "Client" as Client
+actor "Administrator" as Admin
+
+rectangle "RTTH Node (Iteration 1)" {
+    
+    ' Arranged vertically to prevent crossing
+    usecase "Check System Health" as UC_Health
+    usecase "Submit Transaction" as UC_Submit
+    usecase "Validate Format" as UC_Validate
+    usecase "Get Transaction ID" as UC_GetID
+    usecase "View Local Logs" as UC_Logs
+
+    ' Internal Logic Connections
+    UC_Submit ..> UC_Validate : <<include>>
+    UC_Submit ..> UC_GetID : <<include>>
+}
+
+' External Connections (Top-down order to guide layout)
+Client --> UC_Health
+Client --> UC_Submit
+
+Admin --> UC_Health
+Admin --> UC_Logs
+
+@enduml

@@ -1,0 +1,70 @@
+@startuml
+title Class Diagram - V2.0
+
+' Style settings for professional look
+skinparam class {
+    BackgroundColor White
+    ArrowColor Black
+    BorderColor Black
+}
+skinparam linetype ortho
+
+' 1. Domain Layer: Core Data Structures
+package "Domain" {
+    class Transaction {
+        +ID: UUID
+        +Payload: string
+        +Timestamp: int64
+        +Validate(): error
+    }
+}
+
+' 2. Storage Layer: Data Persistence
+package "Storage" {
+    interface LogStore {
+        +Append(t: Transaction): error
+        +GetByID(id: string): Transaction
+        +GetAll(): []Transaction
+    }
+
+    class MemoryStore {
+        -data: []Transaction
+        -mu: RWMutex
+        +Append(t: Transaction): error
+        +GetByID(id: string): Transaction
+        +GetAll(): []Transaction
+    }
+}
+
+' 3. API Layer: Networking
+package "API" {
+    class HTTPHandler {
+        -store: LogStore
+        +NewHTTPHandler(s: LogStore)
+        +SubmitTransaction(w: ResponseWriter, r: Request)
+        +HealthCheck(w: ResponseWriter, r: Request)
+    }
+    
+    class Server {
+        -port: int
+        -server: http.Server
+        -handler: HTTPHandler
+        +NewServer(port: int, h: HTTPHandler)
+        +Start(): error
+        +Stop(): error
+    }
+}
+
+' Relationships
+' Realization (Implementation)
+MemoryStore ..|> LogStore
+
+' Aggregation/Composition
+HTTPHandler o-- LogStore
+Server *-- HTTPHandler
+
+' Dependency (Usage)
+HTTPHandler ..> Transaction
+MemoryStore ..> Transaction
+
+@enduml

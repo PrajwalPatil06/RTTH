@@ -1,0 +1,44 @@
+@startuml
+title Composite Structure Diagram - V2.0
+skinparam componentStyle uml2
+skinparam linetype polyline
+skinparam backgroundColor white
+
+' 1. The Container (The System Boundary)
+component "RTTH Server Node" as Server {
+    
+    ' 2. The Port (External Interface)
+    port "HTTP Port\n(:8080)" as P1
+
+    ' 3. Internal Parts (The Active Modules)
+    component "HTTP Handler\n(Controller Part)" as Handler
+    component "Memory Store\n(Data Part)" as Store
+    
+    ' 4. The Interface (Contract between parts)
+    interface "LogStore" as IStore
+}
+
+' 5. Connectors (Wiring it all together)
+
+' Delegate Connector:
+' Passes the external request from the Port to the internal Handler
+P1 ..> Handler : <<delegate>>
+
+' Ball-and-Socket (Assembly Connector):
+' The Handler requires storage capabilities
+Handler --( IStore : requires
+
+' The Memory Store provides those capabilities
+IStore -- Store : provides
+
+note right of P1
+  Receives JSON
+  POST /transaction
+end note
+
+note bottom of IStore
+  Decouples Logic
+  from Storage
+end note
+
+@enduml
