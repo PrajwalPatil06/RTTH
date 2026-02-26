@@ -1,4 +1,4 @@
-package domain
+package structs
 
 import (
 	"errors"
@@ -6,13 +6,13 @@ import (
 )
 
 type Transaction struct {
-	ID        string `json:"id"`
+	ID        int `json:"id"`
 	Payload   string `json:"payload"`
 	Timestamp int64  `json:"timestamp"`
 }
 
 func (t *Transaction) Validate() error {
-	if strings.TrimSpace(t.ID) == "" {
+	if t.ID == 0 {
 		return errors.New("transaction ID is required")
 	}
 	if strings.TrimSpace(t.Payload) == "" {
