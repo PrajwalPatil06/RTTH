@@ -7,8 +7,8 @@ import (
 
 type LogStore interface {
 	Append(t structs.Transaction) error
-	GetByID(id string) (structs.Transaction, error)
-	GetAll() []structs.Transaction
+	GetByID(id int) (structs.Transaction, error)
+	GetAll() map[int]structs.Transaction
 }
 
 type MemoryStore struct {
@@ -26,11 +26,12 @@ func (m *MemoryStore) Append(t structs.Transaction) error {
 	defer m.mu.Unlock()
 
 	m.data[t.ID]=t
+	
 	return nil
 }
-func (m *MemoryStore) GetByID(id string) (structs.Transaction, error) {
-	return structs.Transaction{},nil
+func (m *MemoryStore) GetByID(id int) (structs.Transaction, error) {
+	return m.data[id], nil
 }
-func (m *MemoryStore) GetAll() []structs.Transaction {
-	return []structs.Transaction{}
+func (m *MemoryStore) GetAll() map[int]structs.Transaction {
+	return m.data
 }
