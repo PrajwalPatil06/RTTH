@@ -2,6 +2,9 @@ package main
 
 import (
 	"RTTH/internal/handlers"
+	"os"
+	"strconv"
+
 	//"RTTH/internal/store"
 	"RTTH/internal/domain"
 
@@ -10,11 +13,15 @@ import (
 
 func main() {
 	// hard coded 1 node
-	RaftNode := domain.NewNode(1)
-	nodeStorage := handlers.NewNodeStore(RaftNode.Store)
+	nodeId,_ := strconv.Atoi(os.Args[1])
+	RaftNode := domain.NewNode(nodeId)
+
+	handler := handlers.NewHandler(RaftNode.Store,*RaftNode)
 	router := gin.Default()
-	router.POST("/append", nodeStorage.SubmitTransaction)
-	router.POST("/getuserdetails", nodeStorage.GetUserDetails)
-	router.POST("/getalluserdetails", nodeStorage.GetAllUserDetails)
-	router.Run(":8080")
+	go RaftNode.Run()
+	router.POST("/append", handler.HandleAppendTransactionReq)
+	router.POST("/heartbeat", handler.HandleHeartBeat)
+	router.POST("/getuserdetails", handler.GetUserDetails)
+	router.POST("/getalluserdetails", handler.GetAllUserDetails)
+	router.Run(":"+os.Args[2])
 }
