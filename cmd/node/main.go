@@ -9,9 +9,12 @@ import (
 )
 
 func main() {
+	// hard coded 1 node
 	RaftNode := domain.NewNode(1)
-	txHandler := handlers.NewTransactionHandler(RaftNode.Store)
+	nodeStorage := handlers.NewNodeStore(RaftNode.Store)
 	router := gin.Default()
-	router.POST("/append", txHandler.SubmitTransaction)
+	router.POST("/append", nodeStorage.SubmitTransaction)
+	router.POST("/getuserdetails", nodeStorage.GetUserDetails)
+	router.POST("/getalluserdetails", nodeStorage.GetAllUserDetails)
 	router.Run(":8080")
 }
