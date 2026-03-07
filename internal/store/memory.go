@@ -2,6 +2,7 @@ package store
 
 import (
 	"RTTH/internal/structs"
+	"maps"
 	"sync"
 )
 
@@ -12,7 +13,7 @@ type LogStore interface {
 }
 
 type MemoryStore struct {
-	mu   sync.RWMutex
+	Mu   sync.RWMutex
 	data map[int]structs.Transaction
 }
 
@@ -21,17 +22,28 @@ func NewMemoryStore() *MemoryStore {
 		data: make(map[int]structs.Transaction),
 	}
 }
-func (m *MemoryStore) Append(t structs.Transaction) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
 
-	m.data[t.ID]=t
-	
+func (m *MemoryStore) Append(t structs.Transaction) error {
+	m.Mu.Lock()
+	defer m.Mu.Unlock()
+
+	m.data[t.ID] = t
+
 	return nil
 }
+
 func (m *MemoryStore) GetByID(id int) (structs.Transaction, error) {
+	m.Mu.RLock()
+	defer m.Mu.RUnlock()
+
 	return m.data[id], nil
 }
+
 func (m *MemoryStore) GetAll() map[int]structs.Transaction {
-	return m.data
+	m.Mu.RLock()
+	defer m.Mu.RUnlock()
+
+	temp := make(map[int]structs.Transaction, len(m.data))
+	maps.Copy(temp, m.data)
+	return temp
 }
