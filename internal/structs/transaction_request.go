@@ -5,7 +5,6 @@ import (
 	"strings"
 )
 
-// old name: transactionrequest
 type ClientTransaction struct {
 	ClientID  int    `json:"clientid"`
 	Payload   string `json:"payload"`
@@ -20,7 +19,11 @@ func (t *ClientTransaction) Validate() error {
 		return errors.New("payload cannot be empty")
 	}
 	if t.Timestamp == 0 {
-		return errors.New("Timestamp is required")
+		return errors.New("timestamp is required")
 	}
 	return nil
+}
+
+type GetRequest struct {
+	ClientID int `json:"clientid"`
 }

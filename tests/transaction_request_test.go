@@ -5,6 +5,7 @@ import (
 	"testing"
 )
 
+// TC_0001 — Validate() covers all four branches: valid, missing ID, empty payload, zero timestamp
 func TestClientTransaction_Validate(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -12,24 +13,29 @@ func TestClientTransaction_Validate(t *testing.T) {
 		wantErr string
 	}{
 		{
-			name:    "Valid Transaction",
+			name:    "valid transaction",
 			txn:     structs.ClientTransaction{ClientID: 1, Payload: "Valid Data", Timestamp: 12345},
 			wantErr: "",
 		},
 		{
-			name:    "Missing ClientID",
+			name:    "missing clientID",
 			txn:     structs.ClientTransaction{ClientID: 0, Payload: "Valid Data", Timestamp: 12345},
 			wantErr: "transaction ID is required",
 		},
 		{
-			name:    "Empty Payload",
+			name:    "whitespace-only payload",
 			txn:     structs.ClientTransaction{ClientID: 1, Payload: "   ", Timestamp: 12345},
 			wantErr: "payload cannot be empty",
 		},
 		{
-			name:    "Missing Timestamp",
+			name:    "empty payload",
+			txn:     structs.ClientTransaction{ClientID: 1, Payload: "", Timestamp: 12345},
+			wantErr: "payload cannot be empty",
+		},
+		{
+			name:    "zero timestamp",
 			txn:     structs.ClientTransaction{ClientID: 1, Payload: "Valid Data", Timestamp: 0},
-			wantErr: "Timestamp is required",
+			wantErr: "timestamp is required",
 		},
 	}
 
@@ -41,10 +47,42 @@ func TestClientTransaction_Validate(t *testing.T) {
 					t.Errorf("expected no error, got %v", err)
 				}
 			} else {
-				if err == nil || err.Error() != tt.wantErr {
-					t.Errorf("expected error '%s', got '%v'", tt.wantErr, err)
+				if err == nil {
+					t.Errorf("expected error '%s', got nil", tt.wantErr)
+				} else if err.Error() != tt.wantErr {
+					t.Errorf("expected error '%s', got '%s'", tt.wantErr, err.Error())
 				}
 			}
 		})
+	}
+}
+
+// TC_0013 — Validate() errors are returned in field order: clientID → payload → timestamp
+func TestClientTransaction_Validate_ErrorOrder(t *testing.T) {
+	// All three fields invalid — clientID checked first
+	all := structs.ClientTransaction{ClientID: 0, Payload: "", Timestamp: 0}
+	err := all.Validate()
+	if err == nil || err.Error() != "transaction ID is required" {
+		t.Errorf("expected clientID error first, got: %v", err)
+	}
+
+	// clientID present, payload and timestamp wrong — payload checked second
+	noPayload := structs.ClientTransaction{ClientID: 1, Payload: "", Timestamp: 0}
+	err2 := noPayload.Validate()
+	if err2 == nil || err2.Error() != "payload cannot be empty" {
+		t.Errorf("expected payload error second, got: %v", err2)
+	}
+}
+
+// TC_0014 — GetRequest only carries ClientID; used by read-only endpoints
+func TestGetRequest_Fields(t *testing.T) {
+	req := structs.GetRequest{ClientID: 42}
+	if req.ClientID != 42 {
+		t.Errorf("expected ClientID 42, got %d", req.ClientID)
+	}
+
+	empty := structs.GetRequest{}
+	if empty.ClientID != 0 {
+		t.Errorf("expected zero ClientID on empty struct, got %d", empty.ClientID)
 	}
 }
