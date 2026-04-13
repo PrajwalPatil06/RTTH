@@ -1,61 +1,97 @@
 @startuml
-title Activity Diagram - Transaction Processing Flow
+title Activity Diagram - RAFT Transfer & Blockchain Commit Flow (Final)
+
 skinparam linetype ortho
 skinparam backgroundColor white
-skinparam handwritten false
-
-' Style settings
 skinparam activity {
     BackgroundColor White
     BorderColor Black
     ArrowColor Black
 }
-skinparam partition {
-    BackgroundColor White
-    BorderColor Black
-}
 
-' Define Swimlanes (Partitions)
-|#F9F9F9|HTTP Handler|
+|#F0F4FF|Client CLI|
 start
-:Receive HTTP POST Request;
+:Enter transfer (receiver, amount);
+:Build POST /transfer\n{clientid, payload, timestamp};
+:Send to any node via Channel Proxy;
 
-:Parse JSON Payload;
+|#F0FFF0|Channel Proxy (:9000)|
+:Check partition gate for target node;
+if (Gate open?) then (Blocked)
+    :Return 503 Unavailable;
+else (Open)
+    :Add 5-30ms jitter;
+    :Forward to Node :808x;
+end if
 
-if (Is JSON Valid?) then (No)
-    :Set HTTP Status 400 (Bad Request);
-    :Send Error Response;
+|#FFF8F0|RAFT Node - Handler|
+:Receive POST /transfer;
+:Validate ClientTransaction\n(clientID, payload, timestamp);
+if (Valid?) then (No)
+    :Return 400 Bad Request;
     stop
 else (Yes)
-    :Extract Transaction Data;
-    :Validate Business Rules;
-    
-    if (Is Payload Valid?) then (No)
-        :Set HTTP Status 422 (Unprocessable);
-        :Send Validation Error;
-        stop
+end if
+
+if (Node state?) then (Follower)
+    :307 Redirect to Leader URL;
+    |#F0F4FF|Client CLI|
+    :Retry directly to leader;
+    |#FFF8F0|RAFT Node - Handler|
+else (Candidate)
+    :Return 503 election in progress;
+    stop
+else (Leader)
+end if
+
+|#FFF0F0|Leader Node - Domain|
+:Lock mutex;
+:Create Transaction\n{clientID, payload, timestamp, term};
+:Append to Log[];
+:Persist state to disk;
+:Unlock mutex, return log index;
+
+fork
+    :Send AppendEntries RPCs\nto all peers concurrently;
+    |#FFFFF0|RAFT Follower Node|
+    :PrevLog consistency check;
+    if (Log matches?) then (No)
+        :Return Success=false;
     else (Yes)
-        :Create Transaction Object;
-        
-        ' Handover to Storage Layer
-        |Memory Store|
-        
-        partition "Critical Section (Thread Safety)" {
-            :Acquire Mutex (Lock);
-            :Generate Unique ID (UUID);
-            :Append Transaction to Log Slice;
-            :Release Mutex (Unlock);
-        }
-        
-        :Return Success Signal;
-        
-        ' Return to Handler
-        |HTTP Handler|
-        :Construct JSON Response;
-        :Set HTTP Status 200 (OK);
-        :Send Success Response;
-        stop
-    endif
-endif
+        :Append entries;
+        :Advance commitIndex;
+        :applyCommittedLocked();
+        :Persist state;
+        :Return Success=true;
+    end if
+    |#FFF0F0|Leader Node - Domain|
+    :Update matchIndex / nextIndex;
+fork again
+    :WaitForCommit(index, 3s)\npoll every 50ms;
+end fork
+
+:advanceCommitIndex()\ncheck majority matchIndex;
+if (Majority reached?) then (No - timeout)
+    :committed = false;
+else (Yes)
+    :committed = true;
+    :applyCommittedLocked();
+    :Add txn to BlockBuffer;
+    if (BlockBuffer >= 3?) then (Yes)
+        :Take 3 txns as batch;
+        :mine() - loop random nonces\nuntil SHA256 ends in 0/1/2;
+        :BuildBlock, append to Blockchain[];
+        :Persist updated chain;
+    else (No)
+    end if
+end if
+
+|#FFF8F0|RAFT Node - Handler|
+:GetBalance(clientID);
+:Return 200 OK\n{committed, committed_balance,\npending_balance};
+
+|#F0F4FF|Client CLI|
+:Display result to user;
+stop
 
 @enduml

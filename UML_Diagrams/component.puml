@@ -1,10 +1,9 @@
 @startuml
-title Component Diagram - V2.0
+title Component Diagram - RTTH Distributed Ledger System (Final)
+
 skinparam linetype ortho
 skinparam componentStyle uml2
 skinparam backgroundColor white
-
-' Style settings
 skinparam component {
     BackgroundColor White
     BorderColor Black
@@ -14,42 +13,86 @@ skinparam interface {
     BackgroundColor White
     BorderColor Black
 }
-
-' 1. External Component
-component "Client Application\n(Postman/Test Script)" as Client
-
-' 2. The Main System Container
-component "RTTH Node (Go Process)" as Node {
-    
-    ' Port definition
-    port "Port 8080" as p1
-
-    ' 3. Internal Modules (Layers)
-    component "API Module\n(Handlers & Routing)" as API
-    component "Core Logic Module\n(Validation & Transaction)" as Core
-    component "Storage Module\n(In-Memory Store)" as Store
-
-    ' 4. Interfaces (Contracts)
-    interface "HTTP Endpoint" as IHTTP
-    interface "TxService" as ITx
-    interface "LogStore" as IStore
+skinparam package {
+    BackgroundColor White
+    BorderColor Black
 }
 
-' 5. Wiring / Relationships
+' ── External Actors ───────────────────────────────────────────────────────────
+component "Client CLI\n(cmd/client/main.go)" as Client
+component "first_blockchain.txt\n(genesis seed)" as GenesisFile
 
-' Client connects to the physical port
-Client ..> p1 : HTTP/JSON
+' ── Channel Proxy ─────────────────────────────────────────────────────────────
+component "Channel Proxy\n(cmd/channel/main.go)\n:9000" as Channel {
+    port "POST /forward/:nodeID/*path" as FwdPort
+    port "POST /admin/partition"       as AdminPort
+    component "Gate Controller\n(partition rules)" as GateCtrl
+    component "Random Jitter\n(5–30 ms)"           as Jitter
+}
 
-' Port connects to the API Module via HTTP Interface
-p1 -- IHTTP
-IHTTP -- API
+' ── RAFT Node (one instance, replicated ×3) ───────────────────────────────────
+component "RAFT Node\n(cmd/server/main.go)\n:8081 / :8082 / :8083" as NodeProc {
 
-' API Layer requires the Core Logic Layer
-API --( ITx
-ITx -- Core
+    port ":808x HTTP"      as NodePort
+    port "disk I/O"        as DiskPort
 
-' Core Logic Layer requires the Storage Layer
-Core --( IStore
-IStore -- Store
+    component "Gin Router\n(routes)" as Router
+
+    component "handlers.Handler\n(HTTP layer)" as HandlerComp {
+        port "POST /transfer"       as TxPort
+        port "POST /balance"        as BalPort
+        port "GET  /blockchain"     as BCPort
+        port "POST /requestvote"    as VotePort
+        port "POST /appendentries"  as AEPort
+        port "POST /append"         as LegacyPort
+    }
+
+    component "domain.Node\n(RAFT state machine)" as DomainComp {
+        component "Election Engine\n(StartElection)" as Election
+        component "Log Replication\n(replicateLog)"  as Replication
+        component "Commit Tracker\n(advanceCommitIndex)" as CommitTrack
+    }
+
+    component "blockchain\n(PoW mining + balance)" as BCComp
+
+    component "store.MemoryStore\n(in-process log)" as StoreComp
+
+    component "persist.Storage\n(JSON file)" as PersistComp
+
+    interface "LogStore"    as ILogStore
+    interface "BlockchainOps" as IBCOps
+}
+
+' ── Wiring: external to channel ──────────────────────────────────────────────
+Client      ..>  FwdPort   : HTTP/JSON\nPOST /forward/N/transfer
+Client      ..>  AdminPort : partition control
+
+' ── Wiring: channel to node ──────────────────────────────────────────────────
+FwdPort   ..>  NodePort : proxied HTTP\n(gate + jitter)
+GateCtrl   --  Jitter
+
+' ── Wiring: router → handler ─────────────────────────────────────────────────
+NodePort  --   Router
+Router    ..>  HandlerComp
+
+' ── Wiring: handler → domain ─────────────────────────────────────────────────
+HandlerComp --( ILogStore
+ILogStore   --  StoreComp
+HandlerComp ..> DomainComp
+
+' ── Wiring: domain → blockchain ──────────────────────────────────────────────
+DomainComp  --( IBCOps
+IBCOps      --  BCComp
+
+' ── Wiring: domain → persist ─────────────────────────────────────────────────
+DomainComp  ..>  DiskPort
+DiskPort    --   PersistComp
+
+' ── Wiring: genesis seed ─────────────────────────────────────────────────────
+GenesisFile ..>  BCComp : LoadFirstBlockchain\n(first boot only)
+
+' ── Peer RPC: node → channel → node ─────────────────────────────────────────
+Replication ..>  FwdPort : AppendEntries RPC\n(X-Sender-ID header)
+Election    ..>  FwdPort : RequestVote RPC
 
 @enduml

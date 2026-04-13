@@ -1,66 +1,105 @@
 @startuml
-title Sequence Diagram - V2.0
+title Sequence Diagram - Transfer Request with RAFT Replication & Block Mining (Final)
+
 skinparam sequenceMessageAlign center
 skinparam responseMessageBelowArrow true
 skinparam backgroundColor white
-skinparam handwritten false
-
-' Style settings
 skinparam participant {
     BackgroundColor White
     BorderColor Black
-    ArrowColor Black
 }
 skinparam actor {
     BackgroundColor White
     BorderColor Black
 }
 
-' Actors and Participants
-actor "Client" as Client
-participant "HTTPHandler" as Handler
-participant "Transaction" as Tx
-participant "MemoryStore" as Store
+actor      "Client CLI"        as CLI
+participant "Channel Proxy\n:9000"    as Proxy
+participant "Leader Node\n:8081"      as Leader
+participant "Follower A\n:8082"       as FA
+participant "Follower B\n:8083"       as FB
+participant "persist.Storage\n(disk)" as Disk
+participant "blockchain\n(PoW miner)" as Miner
 
-' Flow Start
-Client -> Handler: POST /transaction\n{payload: "A->B 10"}
-activate Handler
+== Client submits a transfer ==
 
-' 1. Parsing Phase
-Handler -> Handler: Parse JSON Body
-    
-alt Parsing Error
-    Handler --> Client: 400 Bad Request\n(Invalid JSON)
-else Parsing Success
+CLI -> Proxy  : POST /forward/1/transfer\n{clientid:1, payload:"2 50", timestamp:T}
+activate Proxy
+Proxy -> Proxy : Check gate[1]=open\nAdd 5–30ms jitter
+Proxy -> Leader : POST /transfer (forwarded)\nX-Sender-ID: 0
+activate Leader
 
-    ' 2. Validation Phase
-    Handler -> Tx: Validate()
-    activate Tx
-    
-    alt Validation Failed
-        Tx --> Handler: Error (Invalid Payload)
-        deactivate Tx
-        Handler --> Client: 422 Unprocessable Entity
-    else Validation Success
-        Tx --> Handler: OK
-        deactivate Tx
+Leader -> Leader : Validate ClientTransaction\nclientID≠0, payload≠"", timestamp≠0
+Leader -> Leader : Lock mutex\nCreate Transaction{clientID:1, payload:"2 50", term:N}\nAppend to Log[]\nidx = len(Log)
+Leader -> Disk   : Persist()\n{currentTerm, votedFor, log, blockchain, blockBuffer}
+activate Disk
+Disk --> Leader  : ok
+deactivate Disk
 
-        ' 3. Storage Phase
-        Handler -> Store: Append(Transaction)
-        activate Store
-        
-        Store -> Store: Lock Mutex
-        Store -> Store: Add to Slice
-        Store -> Store: Unlock Mutex
-        
-        Store --> Handler: Success (Index: 1)
-        deactivate Store
+== Parallel log replication to all peers ==
 
-        ' 4. Response Phase
-        Handler --> Client: 200 OK\n{id: "uuid", status: "committed"}
-    end
+par Replicate to Follower A
+    Leader -> Proxy : POST /forward/2/appendentries\n{term:N, leaderID:1, prevLogIndex:idx-1,\nprevLogTerm:t, entries:[txn], leaderCommit:ci}\nX-Sender-ID: 1
+    activate Proxy
+    Proxy -> FA : POST /appendentries (forwarded)
+    activate FA
+    FA -> FA : Check term ≥ currentTerm\nUpdate state=Follower, leaderID=1\nPrevLog consistency check\nAppend entry to Log[]
+    FA -> Disk : Persist()
+    activate Disk
+    Disk --> FA : ok
+    deactivate Disk
+    FA -> FA : Advance commitIndex\napplyCommittedLocked()
+    FA --> Proxy : {term:N, success:true}
+    deactivate FA
+    Proxy --> Leader : {term:N, success:true}
+    deactivate Proxy
+else Replicate to Follower B
+    Leader -> Proxy : POST /forward/3/appendentries\n{...same...}
+    activate Proxy
+    Proxy -> FB : POST /appendentries (forwarded)
+    activate FB
+    FB -> FB : Check term, PrevLog\nAppend entry\napplyCommittedLocked()
+    FB --> Proxy : {term:N, success:true}
+    deactivate FB
+    Proxy --> Leader : {term:N, success:true}
+    deactivate Proxy
 end
 
-deactivate Handler
+== Commit & block mining ==
+
+Leader -> Leader : Update matchIndex[2]=idx, matchIndex[3]=idx\nadvanceCommitIndex()\ncount(matchIndex≥idx) = 3 ≥ majority(2)\ncommitIndex = idx
+Leader -> Leader : applyCommittedLocked()\nAdd txn → BlockBuffer
+
+alt BlockBuffer reaches 3 transactions (BlockSize)
+    Leader -> Miner : BuildBlock(chain, batch[3], term)
+    activate Miner
+    Miner -> Miner : Loop: random 8-char nonce\ncomputeHash(prevHash, txns, nonce)\nisValidHash? (last char ∈ {0,1,2})
+    Miner --> Leader : Block{term, prevHash, nonce, txns, hash}
+    deactivate Miner
+    Leader -> Leader : Append Block to Blockchain[]\nClear BlockBuffer slice
+    Leader -> Disk   : Persist() (updated blockchain)
+    activate Disk
+    Disk --> Leader  : ok
+    deactivate Disk
+end
+
+== Response ==
+
+Leader -> Leader : WaitForCommit satisfied\nGetBalance(clientID=1)\nGetCommittedBalance + GetPendingBalance
+Leader --> Proxy  : 200 OK\n{committed:true,\ncommitted_balance:X,\npending_balance:Y}
+deactivate Leader
+Proxy --> CLI     : 200 OK (forwarded)
+deactivate Proxy
+
+== Follower redirect scenario (alternative) ==
+
+CLI ->  Proxy  : POST /forward/2/transfer (hits Follower A)
+Proxy -> FA    : POST /transfer
+activate FA
+FA -> FA : state == "Follower"\nleaderURL = OtherNodes[leaderID]
+FA --> Proxy : 307 Temporary Redirect\nLocation: http://localhost:9000/forward/1/transfer
+deactivate FA
+Proxy --> CLI  : 307 (forwarded)
+CLI -> Proxy   : POST /forward/1/transfer (retry leader directly)
 
 @enduml

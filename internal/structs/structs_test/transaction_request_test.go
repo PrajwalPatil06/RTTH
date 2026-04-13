@@ -1,11 +1,12 @@
-package test
+package structs_test
 
 import (
 	"RTTH/internal/structs"
 	"testing"
 )
 
-// TC_0001 — Validate() covers all four branches: valid, missing ID, empty payload, zero timestamp
+// TC_0001 — Validate() covers all five branches: valid, missing ID, whitespace
+// payload, empty payload, zero timestamp.
 func TestClientTransaction_Validate(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -40,6 +41,7 @@ func TestClientTransaction_Validate(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			err := tt.txn.Validate()
 			if tt.wantErr == "" {
@@ -48,25 +50,24 @@ func TestClientTransaction_Validate(t *testing.T) {
 				}
 			} else {
 				if err == nil {
-					t.Errorf("expected error '%s', got nil", tt.wantErr)
+					t.Errorf("expected error %q, got nil", tt.wantErr)
 				} else if err.Error() != tt.wantErr {
-					t.Errorf("expected error '%s', got '%s'", tt.wantErr, err.Error())
+					t.Errorf("expected error %q, got %q", tt.wantErr, err.Error())
 				}
 			}
 		})
 	}
 }
 
-// TC_0013 — Validate() errors are returned in field order: clientID → payload → timestamp
+// TC_0013 — Validate() errors are returned in field order:
+// clientID → payload → timestamp.
 func TestClientTransaction_Validate_ErrorOrder(t *testing.T) {
-	// All three fields invalid — clientID checked first
 	all := structs.ClientTransaction{ClientID: 0, Payload: "", Timestamp: 0}
 	err := all.Validate()
 	if err == nil || err.Error() != "transaction ID is required" {
 		t.Errorf("expected clientID error first, got: %v", err)
 	}
 
-	// clientID present, payload and timestamp wrong — payload checked second
 	noPayload := structs.ClientTransaction{ClientID: 1, Payload: "", Timestamp: 0}
 	err2 := noPayload.Validate()
 	if err2 == nil || err2.Error() != "payload cannot be empty" {
@@ -74,7 +75,7 @@ func TestClientTransaction_Validate_ErrorOrder(t *testing.T) {
 	}
 }
 
-// TC_0014 — GetRequest only carries ClientID; used by read-only endpoints
+// TC_0014 — GetRequest only carries ClientID; zero value is the empty state.
 func TestGetRequest_Fields(t *testing.T) {
 	req := structs.GetRequest{ClientID: 42}
 	if req.ClientID != 42 {

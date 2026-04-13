@@ -10,10 +10,11 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// go run main.go nodeId portNo timeoutMs dataDir
+// Usage: go run main.go <nodeId> <client_port> <server_port> <timeoutMs> <dataDir>
+// Example: go run main.go 1 8081 300 ./data/node1
 func main() {
 	if len(os.Args) < 5 {
-		fmt.Fprintln(os.Stderr, "usage: main <nodeId> <port> <timeoutMs> <dataDir>")
+		fmt.Fprintln(os.Stderr, "usage: main <nodeId> <client_port> <server_port> <timeoutMs> <dataDir>")
 		os.Exit(1)
 	}
 
@@ -23,7 +24,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	port := os.Args[2]
+	clientPort := os.Args[2]
 
 	nodeTimeout, err := strconv.Atoi(os.Args[3])
 	if err != nil || nodeTimeout <= 0 {
@@ -31,7 +32,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	dataDir := os.Args[4] // e.g. /var/data/raft or ./data
+	dataDir := os.Args[4] // e.g. ./data/node1
 
 	raftNode, err := domain.NewNode(nodeId, nodeTimeout, dataDir)
 	if err != nil {
@@ -43,11 +44,19 @@ func main() {
 	router := gin.Default()
 	go raftNode.Run()
 
-	router.POST("/append", handler.HandleAppendTransactionReq)
+	// ── RAFT RPCs ────────────────────────────────────────────────────────────
 	router.POST("/appendentries", handler.HandleAppendEntries)
 	router.POST("/requestvote", handler.HandleVoteRequest)
+
+	// ── Legacy store endpoints (kept for test compatibility) ─────────────────
+	router.POST("/append", handler.HandleAppendTransactionReq)
 	router.POST("/getuserdetails", handler.GetUserDetails)
 	router.GET("/getalluserdetails", handler.GetAllUserDetails)
 
-	router.Run(":" + port)
+	// ── Banking endpoints ────────────────────────────────────────────────────
+	router.POST("/transfer", handler.HandleTransfer)
+	router.POST("/balance", handler.HandleBalance)
+	router.GET("/blockchain", handler.HandleGetBlockchain)
+
+	router.Run(":" + clientPort)
 }

@@ -1,4 +1,4 @@
-package test
+package store_test
 
 import (
 	"RTTH/internal/store"
@@ -7,11 +7,10 @@ import (
 	"testing"
 )
 
-// TC_0002 — Append assigns a sequential index; GetByID retrieves by that index
+// TC_0002 — Append assigns a sequential index; GetByID retrieves by that index.
 func TestMemoryStore_AppendAndGetByID(t *testing.T) {
 	s := store.NewMemoryStore()
 
-	// Store assigns ID=1 to the first entry regardless of what ClientID is set
 	txn := structs.Transaction{ClientID: 99, Payload: "A->B 10", Timestamp: 123456789}
 	if err := s.Append(txn); err != nil {
 		t.Fatalf("Append: unexpected error: %v", err)
@@ -29,7 +28,7 @@ func TestMemoryStore_AppendAndGetByID(t *testing.T) {
 	}
 }
 
-// TC_0003 — GetAll returns all entries as a map keyed by log index
+// TC_0003 — GetAll returns all entries as a map keyed by log index.
 func TestMemoryStore_GetAll(t *testing.T) {
 	s := store.NewMemoryStore()
 	s.Append(structs.Transaction{ClientID: 1, Payload: "A->B 10"})
@@ -47,7 +46,8 @@ func TestMemoryStore_GetAll(t *testing.T) {
 	}
 }
 
-// TC_0004 — 100 concurrent writers and 50 concurrent readers do not race or corrupt state
+// TC_0004 — 100 concurrent writers and 50 concurrent readers do not race or
+// corrupt state (run with -race).
 func TestMemoryStore_Concurrency(t *testing.T) {
 	s := store.NewMemoryStore()
 	var wg sync.WaitGroup
@@ -75,7 +75,7 @@ func TestMemoryStore_Concurrency(t *testing.T) {
 	}
 }
 
-// TC_0011 — GetByID returns an explicit error for a missing key (not a silent zero value)
+// TC_0011 — GetByID returns an explicit error for a missing key.
 func TestMemoryStore_GetByID_NotFound(t *testing.T) {
 	s := store.NewMemoryStore()
 	_, err := s.GetByID(999)
@@ -84,12 +84,11 @@ func TestMemoryStore_GetByID_NotFound(t *testing.T) {
 	}
 }
 
-// TC_0015 — The store auto-increments the log index; callers cannot dictate the index
+// TC_0015 — The store auto-increments the log index; callers cannot dictate it.
 func TestMemoryStore_SequentialIndexing(t *testing.T) {
 	s := store.NewMemoryStore()
 
 	for i := 0; i < 5; i++ {
-		// Even if the caller sets ID to something arbitrary, the store overwrites it
 		s.Append(structs.Transaction{ID: 999, ClientID: i + 1, Payload: "x"})
 	}
 
@@ -106,7 +105,7 @@ func TestMemoryStore_SequentialIndexing(t *testing.T) {
 	}
 }
 
-// TC_0016 — GetAll returns a copy; mutating the returned map does not affect the store
+// TC_0016 — GetAll returns a copy; mutating the result does not affect the store.
 func TestMemoryStore_GetAll_ReturnsCopy(t *testing.T) {
 	s := store.NewMemoryStore()
 	s.Append(structs.Transaction{ClientID: 1, Payload: "original"})
@@ -116,11 +115,11 @@ func TestMemoryStore_GetAll_ReturnsCopy(t *testing.T) {
 
 	copy2 := s.GetAll()
 	if copy2[1].Payload != "original" {
-		t.Errorf("store internal state was mutated through returned map: got '%s'", copy2[1].Payload)
+		t.Errorf("store internal state was mutated through returned map: got %q", copy2[1].Payload)
 	}
 }
 
-// TC_0017 — Append on an empty store gives ID=1; subsequent entries get 2, 3, ...
+// TC_0017 — Append on an empty store gives ID=1; subsequent entries get 2, 3 …
 func TestMemoryStore_FirstIndexIsOne(t *testing.T) {
 	s := store.NewMemoryStore()
 	s.Append(structs.Transaction{ClientID: 5, Payload: "first"})

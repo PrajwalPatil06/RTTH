@@ -1,70 +1,198 @@
 @startuml
-title Class Diagram - V2.0
+title Class Diagram - RTTH Distributed Ledger (Final)
 
-' Style settings for professional look
 skinparam class {
     BackgroundColor White
     ArrowColor Black
     BorderColor Black
 }
 skinparam linetype ortho
+skinparam packageStyle rectangle
 
-' 1. Domain Layer: Core Data Structures
-package "Domain" {
+' ── Structs package ──────────────────────────────────────────────────────────
+package "structs" {
     class Transaction {
-        +ID: UUID
-        +Payload: string
-        +Timestamp: int64
-        +Validate(): error
+        +ID        : int
+        +ClientID  : int
+        +Payload   : string
+        +Timestamp : int64
+        +Term      : int
+    }
+
+    class Block {
+        +Term     : int
+        +PrevHash : string
+        +Nonce    : string
+        +Txns     : []Transaction
+        +Hash     : string
+        --
+        {static} BlockSize : int = 3
+    }
+
+    class VoteReq {
+        +Term         : int
+        +CandidateID  : int
+        +LastLogIndex : int
+        +LastLogTerm  : int
+        +Timestamp    : int64
+    }
+
+    class VoteResp {
+        +Term        : int
+        +VoteGranted : bool
+    }
+
+    class AppendEntriesReq {
+        +Term         : int
+        +LeaderID     : int
+        +PrevLogIndex : int
+        +PrevLogTerm  : int
+        +Entries      : []Transaction
+        +LeaderCommit : int
+    }
+
+    class AppendEntriesResp {
+        +Term    : int
+        +Success : bool
+    }
+
+    class ClientTransaction {
+        +ClientID  : int
+        +Payload   : string
+        +Timestamp : int64
+        +Validate() : error
+    }
+
+    class GetRequest {
+        +ClientID : int
     }
 }
 
-' 2. Storage Layer: Data Persistence
-package "Storage" {
+' ── Store package ─────────────────────────────────────────────────────────────
+package "store" {
     interface LogStore {
-        +Append(t: Transaction): error
-        +GetByID(id: string): Transaction
-        +GetAll(): []Transaction
+        +Append(t: Transaction) : error
+        +GetByID(id: int) : Transaction
+        +GetAll() : map[int]Transaction
     }
 
     class MemoryStore {
-        -data: []Transaction
-        -mu: RWMutex
-        +Append(t: Transaction): error
-        +GetByID(id: string): Transaction
-        +GetAll(): []Transaction
+        -data      : map[int]Transaction
+        -nextIndex : int
+        -Mu        : sync.RWMutex
+        +Append(t: Transaction) : error
+        +GetByID(id: int) : Transaction
+        +GetAll() : map[int]Transaction
     }
 }
 
-' 3. API Layer: Networking
-package "API" {
-    class HTTPHandler {
-        -store: LogStore
-        +NewHTTPHandler(s: LogStore)
-        +SubmitTransaction(w: ResponseWriter, r: Request)
-        +HealthCheck(w: ResponseWriter, r: Request)
+' ── Persist package ───────────────────────────────────────────────────────────
+package "persist" {
+    class State {
+        +CurrentTerm : int
+        +VotedFor    : map[int]int
+        +Log         : []Transaction
+        +Blockchain  : []Block
+        +BlockBuffer : []Transaction
     }
-    
-    class Server {
-        -port: int
-        -server: http.Server
-        -handler: HTTPHandler
-        +NewServer(port: int, h: HTTPHandler)
-        +Start(): error
-        +Stop(): error
+
+    class Storage {
+        -path : string
+        +NewStorage(dataDir: string, nodeId: int) : Storage
+        +Save(state: State) : error
+        +Load() : State
     }
 }
 
-' Relationships
-' Realization (Implementation)
-MemoryStore ..|> LogStore
+' ── Domain package ────────────────────────────────────────────────────────────
+package "domain" {
+    class Node {
+        +Id                  : int
+        +State               : string
+        +Store               : MemoryStore
+        +OtherNodes          : map[int]string
+        +LeaderId            : int
+        +CurrentTerm         : int
+        +VotedFor            : map[int]int
+        +Log                 : []Transaction
+        +CommitIndex         : int
+        +LastApplied         : int
+        +Blockchain          : []Block
+        +BlockBuffer         : []Transaction
+        -nextIndex           : map[int]int
+        -matchIndex          : map[int]int
+        -storage             : Storage
+        +Mu                  : sync.Mutex
+        --
+        +NewNode(id, timeoutMs, dataDir) : Node
+        +Run()
+        +StartElection()
+        +ProcessVoteRequest(req: VoteReq) : VoteResp
+        +ProcessAppendEntries(req: AppendEntriesReq) : AppendEntriesResp
+        +AppendTransaction(clientID, payload, timestamp) : int
+        +WaitForCommit(logIndex: int, timeout: Duration) : bool
+        +GetBalance(clientID: int) : (int, int)
+        +GetBlockchain() : []Block
+        +Persist() : error
+        -replicateLog()
+        -advanceCommitIndex()
+        -applyCommittedLocked()
+        -initLeaderState()
+    }
+}
 
-' Aggregation/Composition
-HTTPHandler o-- LogStore
-Server *-- HTTPHandler
+' ── Handlers package ──────────────────────────────────────────────────────────
+package "handlers" {
+    class Handler {
+        +Store    : LogStore
+        +RaftNode : Node
+        +NewHandler(s: LogStore, n: Node) : Handler
+        --
+        +HandleAppendTransactionReq(c: Context)
+        +HandleVoteRequest(c: Context)
+        +HandleAppendEntries(c: Context)
+        +HandleTransfer(c: Context)
+        +HandleBalance(c: Context)
+        +HandleGetBlockchain(c: Context)
+        +GetUserDetails(c: Context)
+        +GetAllUserDetails(c: Context)
+    }
+}
 
-' Dependency (Usage)
-HTTPHandler ..> Transaction
-MemoryStore ..> Transaction
+' ── Blockchain package ────────────────────────────────────────────────────────
+package "blockchain" {
+    class BlockchainService <<utility>> {
+        {static} +BuildBlock(chain, txns, term) : Block
+        {static} +LoadFirstBlockchain(path) : []Block
+        {static} +GetCommittedBalance(chain, clientID) : int
+        {static} +GetPendingBalance(chain, uncommitted, clientID) : int
+        {static} +PrintChain(chain) : string
+        -{static} mine(prevHash, txns) : (nonce, hash)
+        -{static} isValidHash(hash) : bool
+        -{static} computeHash(prevHash, txns, nonce) : string
+    }
+}
+
+' ── Relationships ─────────────────────────────────────────────────────────────
+MemoryStore    ..|>  LogStore
+Block          "1" *-- "1..*" Transaction
+State          *--  Block
+State          *--  Transaction
+Storage        ..>  State          : serialises
+Node           *--  Storage        : persists via
+Node           *--  MemoryStore    : stores to
+Node           *--  Block          : blockchain[]
+Node           *--  Transaction    : log[]
+Node           ..>  VoteReq
+Node           ..>  VoteResp
+Node           ..>  AppendEntriesReq
+Node           ..>  AppendEntriesResp
+Handler        o--  LogStore
+Handler        o--  Node
+Handler        ..>  ClientTransaction
+Handler        ..>  GetRequest
+BlockchainService ..> Block
+BlockchainService ..> Transaction
+Node           ..>  BlockchainService : uses
 
 @enduml

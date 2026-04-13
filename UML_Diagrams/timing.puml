@@ -1,10 +1,7 @@
 @startuml
-title Transaction Latency Budget (Iteration 1)
+title Timing Diagram - RAFT Transfer End-to-End Latency Budget (Final)
 skinparam backgroundColor white
-
-' 1. INCREASED SCALE: This fixes the horizontal overlapping
-' 1 ms is now 15 pixels, giving plenty of room for text
-scale 1 as 15 pixels
+scale 1 as 20 pixels
 
 skinparam timingDiagram {
     BackgroundColor #F9F9F9
@@ -12,72 +9,126 @@ skinparam timingDiagram {
     LineColor #2C3E50
 }
 
-' Define Participants
-robust "Client" as Client
-robust "HTTP Handler" as Handler
-robust "Memory Store" as Store
+' Participants
+robust  "Client CLI"       as CLI
+robust  "Channel Proxy"    as Proxy
+robust  "Leader Node"      as Leader
+robust  "Follower A / B"   as Followers
+robust  "Persist (disk)"   as Disk
+robust  "PoW Miner"        as Miner
 
-' Initial State
+' ── T=0 : Client sends ────────────────────────────────────────────────────────
 @0
-Client is Idle
-Handler is Idle
-Store is Idle
+CLI       is "Building request" #A9D0F5
+Proxy     is Idle
+Leader    is Idle
+Followers is Idle
+Disk      is Idle
+Miner     is Idle
 
-' T=0: Client sends request
-@0
-Client is "Sending" #A9D0F5
-Client -> Handler@+10 : Network (10ms)
+@5
+CLI       is "Sending POST /transfer" #6EB5FF
+CLI -> Proxy@+5 : HTTP POST /transfer
 
-' T=10: Handler receives and parses
+' ── T=10 : Proxy receives ────────────────────────────────────────────────────
 @10
-Client is "Waiting" #E6E6E6
-Handler is "Parsing" #A9F5A9
+CLI       is "Waiting" #E6E6E6
+Proxy     is "Gate check" #FFE5A0
+@12
+Proxy     is "Jitter delay (5-30ms)" #FFD966
+Proxy -> Leader@+18 : Forward to :8081
 
-' T=15: Handler validates
-@15
-Handler is "Validating" #A9F5A9
-Handler -> Store@+1 : Internal Call
+' ── T=30 : Leader receives ────────────────────────────────────────────────────
+@30
+Proxy     is Idle
+Leader    is "Validate & Lock" #A9F5A9
 
-' T=16: Critical Section Starts
-@16
-Handler is "Waiting" #E6E6E6
-Store is "Acquire Lock" #F5A9A9
+@33
+Leader    is "Append Log + Persist" #58D68D
+Leader -> Disk@+2 : Persist()
 
-' T=17: Lock Acquired
-@17
-Store is "Writing (Critical)" #FF5555
-
-' T=20: Lock Released
-@20
-Store is "Release Lock" #F5A9A9
-Store -> Handler@+1 : Success
-
-' T=21: Handler builds response
-@21
-Store is Idle
-Handler is "Building Resp" #A9F5A9
-
-' T=25: Handler sends response
-@25
-Handler is Idle
-Handler -> Client@+10 : Network (10ms)
-
-' T=35: Client receives response
 @35
-Client is "Received" #A9D0F5
-@36
-Client is Idle
+Disk      is "Atomic write" #F5CBA7
+@37
+Disk      is Idle
+Leader -> Followers@+3 : AppendEntries RPCs (parallel)
 
-' Visual constraints (Moved label to legend to prevent overlap)
-highlight 16 to 20 #FFEEEE;line:Red : Mutex (4ms)
-highlight 0 to 35 #FAFAFA;line:Black : Total RTT (35ms)
+' ── T=40 : Followers process ─────────────────────────────────────────────────
+@40
+Leader    is "WaitForCommit polling" #E6E6E6
+Followers is "PrevLog check" #D2F5A9
+
+@43
+Followers is "Append + Persist" #58D68D
+
+@47
+Followers is "applyCommitted" #A9F5A9
+Followers -> Leader@+3 : success=true (×2)
+
+' ── T=50 : Leader commits ────────────────────────────────────────────────────
+@50
+Leader    is "advanceCommitIndex\nmajority reached" #58D68D
+Followers is Idle
+
+@53
+Leader    is "applyCommittedLocked\nBlockBuffer += txn" #A9F5A9
+
+@56
+Leader    is "GetBalance()" #A9F5A9
+
+' ── T=58 : (conditional) block mined ─────────────────────────────────────────
+@58
+Leader    is "BuildBlock (if buffer=3)" #F9E79F
+Leader -> Miner@+1 : BuildBlock(batch)
+
+@59
+Miner     is "PoW mining loop\n(avg <1ms)" #FF9F43
+
+@61
+Miner     is Idle
+Miner -> Leader@+1 : Block{nonce, hash}
+
+@62
+Leader    is "Blockchain append\n+ Persist" #58D68D
+Leader -> Disk@+2 : Persist()
+
+@64
+Disk      is "Atomic write" #F5CBA7
+@66
+Disk      is Idle
+
+' ── T=67 : Response ──────────────────────────────────────────────────────────
+@67
+Leader    is "Build 200 OK response" #A9F5A9
+Leader -> Proxy@+3 : 200 {committed, balances}
+
+@70
+Leader    is Idle
+Proxy     is "Forward response" #FFD966
+Proxy -> CLI@+5 : 200 OK
+
+@75
+Proxy     is Idle
+CLI       is "Display result" #A9D0F5
+
+@78
+CLI       is Idle
+
+' ── Highlights ────────────────────────────────────────────────────────────────
+highlight 12 to 30  #FFF9E6;line:Orange  : Proxy jitter (≤30ms)
+highlight 30 to 50  #E8F8E8;line:Green   : RAFT replication round-trip
+highlight 59 to 62  #FFF3CD;line:Gold    : PoW mining (<3ms typ.)
+highlight 0  to 78  #F5F5F5;line:Black   : Total RTT ~78ms (typical)
 
 legend right
-    | Color | Meaning |
-    | <#A9D0F5> | Client Activity |
-    | <#A9F5A9> | Handler Processing |
-    | <#FF5555> | Critical Section (Store) |
-    | <#E6E6E6> | Waiting/Idle |
+    | Color           | Phase                        |
+    | <#A9D0F5>       | Client activity              |
+    | <#FFD966>       | Proxy forwarding             |
+    | <#A9F5A9>       | Leader / Follower processing |
+    | <#58D68D>       | Write / commit               |
+    | <#F5CBA7>       | Disk persist                 |
+    | <#FF9F43>       | PoW mining                   |
+    | <#E6E6E6>       | Waiting / polling            |
 end legend
 
 @enduml

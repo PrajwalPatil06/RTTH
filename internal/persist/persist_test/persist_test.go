@@ -1,4 +1,4 @@
-package test
+package persist_test
 
 import (
 	"RTTH/internal/persist"
@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// TC_0018 — NewStorage creates the data directory if it does not exist
+// TC_0018 — NewStorage creates the data directory if it does not exist.
 func TestNewStorage_CreatesDirectory(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "nested", "data")
 	_, err := persist.NewStorage(dir, 1)
@@ -20,7 +20,7 @@ func TestNewStorage_CreatesDirectory(t *testing.T) {
 	}
 }
 
-// TC_0019 — Load on a brand-new node (no state file) returns safe zero values, not an error
+// TC_0019 — Load on a brand-new node (no state file) returns safe zero values.
 func TestStorage_Load_FirstBoot(t *testing.T) {
 	s, _ := persist.NewStorage(t.TempDir(), 1)
 
@@ -40,9 +40,15 @@ func TestStorage_Load_FirstBoot(t *testing.T) {
 	if len(state.Log) != 0 {
 		t.Errorf("expected empty Log on first boot, got %d entries", len(state.Log))
 	}
+	if state.Blockchain == nil {
+		t.Error("Blockchain must not be nil on first boot")
+	}
+	if state.BlockBuffer == nil {
+		t.Error("BlockBuffer must not be nil on first boot")
+	}
 }
 
-// TC_0020 — Save then Load round-trips all three required fields exactly
+// TC_0020 — Save then Load round-trips all required fields exactly.
 func TestStorage_SaveAndLoad_RoundTrip(t *testing.T) {
 	s, _ := persist.NewStorage(t.TempDir(), 2)
 
@@ -50,8 +56,8 @@ func TestStorage_SaveAndLoad_RoundTrip(t *testing.T) {
 		CurrentTerm: 7,
 		VotedFor:    map[int]int{1: 3, 2: 3, 7: 2},
 		Log: []structs.Transaction{
-			{ID: 1, ClientID: 10, Payload: "A->B 100", Timestamp: 111},
-			{ID: 2, ClientID: 11, Payload: "C->D 200", Timestamp: 222},
+			{ID: 1, ClientID: 10, Payload: "A->B 100", Timestamp: 111, Term: 2},
+			{ID: 2, ClientID: 11, Payload: "C->D 200", Timestamp: 222, Term: 3},
 		},
 	}
 
@@ -77,13 +83,14 @@ func TestStorage_SaveAndLoad_RoundTrip(t *testing.T) {
 	}
 	for i, want := range original.Log {
 		got := loaded.Log[i]
-		if got.ID != want.ID || got.ClientID != want.ClientID || got.Payload != want.Payload {
+		if got.ID != want.ID || got.ClientID != want.ClientID ||
+			got.Payload != want.Payload || got.Term != want.Term {
 			t.Errorf("Log[%d]: want %+v, got %+v", i, want, got)
 		}
 	}
 }
 
-// TC_0021 — Multiple Save calls overwrite correctly; Load always returns the latest state
+// TC_0021 — Multiple Save calls overwrite correctly; Load returns the latest state.
 func TestStorage_OverwriteOnSave(t *testing.T) {
 	s, _ := persist.NewStorage(t.TempDir(), 1)
 
@@ -102,7 +109,7 @@ func TestStorage_OverwriteOnSave(t *testing.T) {
 	}
 }
 
-// TC_0022 — Atomic write: the .tmp file must not exist after a successful Save
+// TC_0022 — Atomic write: the .tmp file must not exist after a successful Save.
 func TestStorage_AtomicWrite_NoTempFileLeft(t *testing.T) {
 	dir := t.TempDir()
 	s, _ := persist.NewStorage(dir, 1)
@@ -116,20 +123,18 @@ func TestStorage_AtomicWrite_NoTempFileLeft(t *testing.T) {
 		t.Fatalf("Save: %v", err)
 	}
 
-	// The temporary file should be gone after a successful rename
 	tmpPath := filepath.Join(dir, "node_1_state.json.tmp")
 	if _, err := os.Stat(tmpPath); !os.IsNotExist(err) {
 		t.Error("temp file still exists after Save — atomic rename did not complete")
 	}
 
-	// The real state file must exist
 	realPath := filepath.Join(dir, "node_1_state.json")
 	if _, err := os.Stat(realPath); os.IsNotExist(err) {
 		t.Error("state file does not exist after Save")
 	}
 }
 
-// TC_0023 — Node ID is encoded in the filename; two nodes in the same dir do not conflict
+// TC_0023 — Node ID is encoded in the filename; two nodes in the same dir do not conflict.
 func TestStorage_PerNodeFile(t *testing.T) {
 	dir := t.TempDir()
 	s1, _ := persist.NewStorage(dir, 1)
@@ -149,10 +154,9 @@ func TestStorage_PerNodeFile(t *testing.T) {
 	}
 }
 
-// TC_0024 — Load guards against nil VotedFor and nil Log from an older serialisation format
+// TC_0024 — Load guards against nil VotedFor and nil Log from an older format.
 func TestStorage_Load_NilMapGuard(t *testing.T) {
 	dir := t.TempDir()
-	// Write a state file that omits VotedFor and Log (simulating an older format)
 	path := filepath.Join(dir, "node_1_state.json")
 	os.WriteFile(path, []byte(`{"current_term":3}`), 0o644)
 
@@ -166,5 +170,11 @@ func TestStorage_Load_NilMapGuard(t *testing.T) {
 	}
 	if state.Log == nil {
 		t.Error("Log must not be nil after loading a state that omitted the field")
+	}
+	if state.Blockchain == nil {
+		t.Error("Blockchain must not be nil after loading a state that omitted the field")
+	}
+	if state.BlockBuffer == nil {
+		t.Error("BlockBuffer must not be nil after loading a state that omitted the field")
 	}
 }

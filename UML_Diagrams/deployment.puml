@@ -1,10 +1,8 @@
 @startuml
-title Deployment Diagram - Iteration 1
+title Deployment Diagram - RTTH Distributed Ledger (Final)
+
 skinparam linetype ortho
 skinparam backgroundColor white
-skinparam handwritten false
-
-' Style settings
 skinparam node {
     BackgroundColor White
     BorderColor Black
@@ -19,31 +17,79 @@ skinparam component {
     BorderColor Black
 }
 
-' 1. Client Node (The source of requests)
-node "Client Workstation" as ClientNode {
-    artifact "Test Script\n(Postman / curl)" as TestTool
+' ── Client workstation ────────────────────────────────────────────────────────
+node "Developer Workstation" as DevBox {
+    artifact "cmd/client/main.go\n(Go source)" as ClientSrc
+    component "Client CLI\n(interactive banking terminal)" as ClientBin {
+        port "stdout / stdin" as CLIPort
+    }
+    artifact "first_blockchain.txt\n(genesis transactions)" as GenesisFile
 }
 
-' 2. Server Node (The deployment target)
-node "Linux Server\n(Ubuntu 22.04 LTS)" as ServerNode {
-    
-    ' The Execution Environment
-    node "Operating System Process" as OSProc {
-        
-        ' The Executable File (Build Artifact)
-        artifact "rtth-server-v0.1\n(Go Binary)" as Binary
-        
-        ' The Running Instance
-        component "RTTH Service\n(Running on :8080)" as Service
+' ── Single host running all processes (localhost demo) ───────────────────────
+node "Linux Host\n(localhost)" as Host {
+
+    ' Channel proxy process
+    node "Channel Proxy Process\n(cmd/channel/main.go)" as ChannelProc {
+        component "Gin Router + Gate Controller" as ChannelApp {
+            port "TCP :9000\n/forward/:nodeID/*path\n/admin/partition" as ChannelPort
+        }
+    }
+
+    ' Node 1
+    node "RAFT Node 1\n(cmd/server/main.go)" as Node1Proc {
+        component "Node 1 Service\n(Follower | Candidate | Leader)" as Node1App {
+            port "TCP :8081" as N1Port
+        }
+        artifact "data/node1/\nnode_1_state.json" as N1Data
+    }
+
+    ' Node 2
+    node "RAFT Node 2\n(cmd/server/main.go)" as Node2Proc {
+        component "Node 2 Service\n(Follower | Candidate | Leader)" as Node2App {
+            port "TCP :8082" as N2Port
+        }
+        artifact "data/node2/\nnode_2_state.json" as N2Data
+    }
+
+    ' Node 3
+    node "RAFT Node 3\n(cmd/server/main.go)" as Node3Proc {
+        component "Node 3 Service\n(Follower | Candidate | Leader)" as Node3App {
+            port "TCP :8083" as N3Port
+        }
+        artifact "data/node3/\nnode_3_state.json" as N3Data
     }
 }
 
-' 3. Relationships
+' ── Communication paths ───────────────────────────────────────────────────────
+ClientBin   ..> ChannelPort : HTTP/JSON\nPOST /forward/N/transfer|balance\nGET  /forward/N/blockchain
 
-' Client connects to Server via Network
-TestTool -- ServerNode : TCP/IP (HTTP 1.1)
+ChannelPort ..> N1Port : HTTP/JSON proxied\n(gated + jittered)
+ChannelPort ..> N2Port : HTTP/JSON proxied\n(gated + jittered)
+ChannelPort ..> N3Port : HTTP/JSON proxied\n(gated + jittered)
 
-' The Service is instantiated from the Binary
-Binary ..> Service : <<manifest>>
+N1Port      ..> ChannelPort : Peer RPCs\n/appendentries\n/requestvote\n(X-Sender-ID: 1)
+N2Port      ..> ChannelPort : Peer RPCs\n(X-Sender-ID: 2)
+N3Port      ..> ChannelPort : Peer RPCs\n(X-Sender-ID: 3)
+
+Node1App    ..> N1Data : Persist()\natomic JSON write
+Node2App    ..> N2Data : Persist()
+Node3App    ..> N3Data : Persist()
+
+GenesisFile ..> Node1App : LoadFirstBlockchain\n(first boot only)
+GenesisFile ..> Node2App : LoadFirstBlockchain
+GenesisFile ..> Node3App : LoadFirstBlockchain
+
+note top of ChannelProc
+  Simulates network partitions.
+  "1,2;3" isolates node 3.
+  "reset" reopens all gates.
+end note
+
+note bottom of N1Data
+  Durable state:
+  currentTerm, votedFor[],
+  log[], blockchain[], blockBuffer[]
+end note
 
 @enduml
