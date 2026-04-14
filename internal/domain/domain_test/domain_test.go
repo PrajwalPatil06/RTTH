@@ -18,13 +18,14 @@ func newNode(t *testing.T, id int) *domain.Node {
 	return n
 }
 
+// TestNewNode_TableDriven covers node initialization behavior.
 func TestNewNode_TableDriven(t *testing.T) {
 	tests := []struct {
 		name string
 		run  func(t *testing.T)
 	}{
 		{
-			name: "initialization defaults",
+			name: "TC_UT_DOM_001 initialization defaults",
 			run: func(t *testing.T) {
 				n := newNode(t, 1)
 				if n.Id != 1 || n.State != "Follower" {
@@ -39,7 +40,7 @@ func TestNewNode_TableDriven(t *testing.T) {
 			},
 		},
 		{
-			name: "loads persisted state",
+			name: "TC_UT_DOM_002 loads persisted state",
 			run: func(t *testing.T) {
 				dir := t.TempDir()
 				s, _ := persist.NewStorage(dir, 1)
@@ -58,7 +59,7 @@ func TestNewNode_TableDriven(t *testing.T) {
 			},
 		},
 		{
-			name: "bad data directory returns error",
+			name: "TC_UT_DOM_003 bad data directory returns error",
 			run: func(t *testing.T) {
 				blockingFile := t.TempDir() + "/notadir"
 				_ = os.WriteFile(blockingFile, []byte("x"), 0o644)
@@ -77,6 +78,7 @@ func TestNewNode_TableDriven(t *testing.T) {
 	}
 }
 
+// TestProcessVoteRequest_TableDriven covers vote request handling.
 func TestProcessVoteRequest_TableDriven(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -87,7 +89,7 @@ func TestProcessVoteRequest_TableDriven(t *testing.T) {
 		wantState string
 	}{
 		{
-			name: "stale term rejected",
+			name: "TC_UT_DOM_004 stale term rejected",
 			setup: func(n *domain.Node) {
 				n.CurrentTerm = 5
 			},
@@ -97,7 +99,7 @@ func TestProcessVoteRequest_TableDriven(t *testing.T) {
 			wantState: "Follower",
 		},
 		{
-			name:      "first vote in term is granted",
+			name:      "TC_UT_DOM_005 first vote in term is granted",
 			setup:     func(n *domain.Node) {},
 			req:       structs.VoteReq{Term: 1, CandidateID: 2, LastLogIndex: 0, LastLogTerm: 0},
 			wantGrant: true,
@@ -105,7 +107,7 @@ func TestProcessVoteRequest_TableDriven(t *testing.T) {
 			wantState: "Follower",
 		},
 		{
-			name: "higher term forces step down",
+			name: "TC_UT_DOM_006 higher term forces step down",
 			setup: func(n *domain.Node) {
 				n.State = "Leader"
 				n.CurrentTerm = 3
@@ -144,6 +146,7 @@ func TestProcessVoteRequest_TableDriven(t *testing.T) {
 	}
 }
 
+// TestProcessAppendEntries_TableDriven covers append-entries handling.
 func TestProcessAppendEntries_TableDriven(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -153,7 +156,7 @@ func TestProcessAppendEntries_TableDriven(t *testing.T) {
 		check       func(t *testing.T, n *domain.Node)
 	}{
 		{
-			name: "stale term rejected",
+			name: "TC_UT_DOM_007 stale term rejected",
 			setup: func(n *domain.Node) {
 				n.CurrentTerm = 5
 			},
@@ -162,7 +165,7 @@ func TestProcessAppendEntries_TableDriven(t *testing.T) {
 			check:       func(t *testing.T, n *domain.Node) {},
 		},
 		{
-			name:        "heartbeat updates leader state",
+			name:        "TC_UT_DOM_008 heartbeat updates leader state",
 			setup:       func(n *domain.Node) { n.State = "Candidate" },
 			req:         structs.AppendEntriesReq{Term: 2, LeaderID: 3, Entries: []structs.Transaction{}},
 			wantSuccess: true,
@@ -175,7 +178,7 @@ func TestProcessAppendEntries_TableDriven(t *testing.T) {
 			},
 		},
 		{
-			name:        "appends entries and advances commit index",
+			name:        "TC_UT_DOM_009 appends entries and advances commit index",
 			setup:       func(n *domain.Node) {},
 			req:         structs.AppendEntriesReq{Term: 1, LeaderID: 2, Entries: []structs.Transaction{{ClientID: 1, Payload: "2 50", Term: 1}, {ClientID: 2, Payload: "1 10", Term: 1}}, LeaderCommit: 2},
 			wantSuccess: true,
@@ -208,13 +211,14 @@ func TestProcessAppendEntries_TableDriven(t *testing.T) {
 	}
 }
 
+// TestNodeHelpers_TableDriven covers node helper method behavior.
 func TestNodeHelpers_TableDriven(t *testing.T) {
 	tests := []struct {
 		name string
 		run  func(t *testing.T, n *domain.Node)
 	}{
 		{
-			name: "append transaction stores entry",
+			name: "TC_UT_DOM_010 append transaction stores entry",
 			run: func(t *testing.T, n *domain.Node) {
 				n.Mu.Lock()
 				n.State = "Leader"
@@ -230,7 +234,7 @@ func TestNodeHelpers_TableDriven(t *testing.T) {
 			},
 		},
 		{
-			name: "wait for commit timeout false",
+			name: "TC_UT_DOM_011 wait for commit timeout false",
 			run: func(t *testing.T, n *domain.Node) {
 				if n.WaitForCommit(1, 100*time.Millisecond) {
 					t.Fatalf("expected false when commit never advances")
@@ -238,7 +242,7 @@ func TestNodeHelpers_TableDriven(t *testing.T) {
 			},
 		},
 		{
-			name: "wait for commit true after update",
+			name: "TC_UT_DOM_012 wait for commit true after update",
 			run: func(t *testing.T, n *domain.Node) {
 				go func() {
 					time.Sleep(50 * time.Millisecond)
@@ -252,7 +256,7 @@ func TestNodeHelpers_TableDriven(t *testing.T) {
 			},
 		},
 		{
-			name: "get balance includes pending",
+			name: "TC_UT_DOM_013 get balance includes pending",
 			run: func(t *testing.T, n *domain.Node) {
 				n.Mu.Lock()
 				n.Log = append(n.Log, structs.Transaction{ClientID: 1, Payload: "2 100", Term: 1})

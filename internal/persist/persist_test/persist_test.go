@@ -8,13 +8,14 @@ import (
 	"testing"
 )
 
+// TestStorageLifecycle_TableDriven covers storage lifecycle behavior.
 func TestStorageLifecycle_TableDriven(t *testing.T) {
 	tests := []struct {
 		name string
 		run  func(t *testing.T)
 	}{
 		{
-			name: "new storage creates directory",
+			name: "TC_UT_PER_001 new storage creates directory",
 			run: func(t *testing.T) {
 				dir := filepath.Join(t.TempDir(), "nested", "data")
 				if _, err := persist.NewStorage(dir, 1); err != nil {
@@ -26,7 +27,7 @@ func TestStorageLifecycle_TableDriven(t *testing.T) {
 			},
 		},
 		{
-			name: "load first boot returns safe defaults",
+			name: "TC_UT_PER_002 load first boot returns safe defaults",
 			run: func(t *testing.T) {
 				s, _ := persist.NewStorage(t.TempDir(), 1)
 				state, err := s.Load()
@@ -42,7 +43,7 @@ func TestStorageLifecycle_TableDriven(t *testing.T) {
 			},
 		},
 		{
-			name: "save and load round trip",
+			name: "TC_UT_PER_003 save and load round trip",
 			run: func(t *testing.T) {
 				s, _ := persist.NewStorage(t.TempDir(), 2)
 				original := persist.State{
@@ -69,7 +70,7 @@ func TestStorageLifecycle_TableDriven(t *testing.T) {
 			},
 		},
 		{
-			name: "latest save overwrites old save",
+			name: "TC_UT_PER_004 latest save overwrites old save",
 			run: func(t *testing.T) {
 				s, _ := persist.NewStorage(t.TempDir(), 1)
 				_ = s.Save(persist.State{CurrentTerm: 1, VotedFor: map[int]int{1: 2}})
@@ -87,7 +88,7 @@ func TestStorageLifecycle_TableDriven(t *testing.T) {
 			},
 		},
 		{
-			name: "atomic write leaves no temp file",
+			name: "TC_UT_PER_005 atomic write leaves no temp file",
 			run: func(t *testing.T) {
 				dir := t.TempDir()
 				s, _ := persist.NewStorage(dir, 1)
@@ -105,7 +106,7 @@ func TestStorageLifecycle_TableDriven(t *testing.T) {
 			},
 		},
 		{
-			name: "per node files stay isolated",
+			name: "TC_UT_PER_006 per node files stay isolated",
 			run: func(t *testing.T) {
 				dir := t.TempDir()
 				s1, _ := persist.NewStorage(dir, 1)
@@ -123,7 +124,7 @@ func TestStorageLifecycle_TableDriven(t *testing.T) {
 			},
 		},
 		{
-			name: "load initializes omitted collections",
+			name: "TC_UT_PER_007 load initializes omitted collections",
 			run: func(t *testing.T) {
 				dir := t.TempDir()
 				path := filepath.Join(dir, "node_1_state.json")

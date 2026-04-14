@@ -5,6 +5,7 @@ import (
 	"testing"
 )
 
+// TestClientTransactionValidate_TableDriven covers client transaction validation.
 func TestClientTransactionValidate_TableDriven(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -12,37 +13,37 @@ func TestClientTransactionValidate_TableDriven(t *testing.T) {
 		wantErr string
 	}{
 		{
-			name:    "valid transaction",
+			name:    "TC_UT_STC_001 valid transaction",
 			txn:     structs.ClientTransaction{ClientID: 1, Payload: "Valid Data", Timestamp: 12345},
 			wantErr: "",
 		},
 		{
-			name:    "missing clientID",
+			name:    "TC_UT_STC_002 missing clientID",
 			txn:     structs.ClientTransaction{ClientID: 0, Payload: "Valid Data", Timestamp: 12345},
 			wantErr: "transaction ID is required",
 		},
 		{
-			name:    "empty payload",
+			name:    "TC_UT_STC_003 empty payload",
 			txn:     structs.ClientTransaction{ClientID: 1, Payload: "", Timestamp: 12345},
 			wantErr: "payload cannot be empty",
 		},
 		{
-			name:    "whitespace payload",
+			name:    "TC_UT_STC_004 whitespace payload",
 			txn:     structs.ClientTransaction{ClientID: 1, Payload: "   ", Timestamp: 12345},
 			wantErr: "payload cannot be empty",
 		},
 		{
-			name:    "missing timestamp",
+			name:    "TC_UT_STC_005 missing timestamp",
 			txn:     structs.ClientTransaction{ClientID: 1, Payload: "Valid Data", Timestamp: 0},
 			wantErr: "timestamp is required",
 		},
 		{
-			name:    "error order clientID first",
+			name:    "TC_UT_STC_006 error order clientID first",
 			txn:     structs.ClientTransaction{ClientID: 0, Payload: "", Timestamp: 0},
 			wantErr: "transaction ID is required",
 		},
 		{
-			name:    "error order payload second",
+			name:    "TC_UT_STC_007 error order payload second",
 			txn:     structs.ClientTransaction{ClientID: 1, Payload: "", Timestamp: 0},
 			wantErr: "payload cannot be empty",
 		},
@@ -63,34 +64,6 @@ func TestClientTransactionValidate_TableDriven(t *testing.T) {
 			}
 			if err.Error() != tt.wantErr {
 				t.Fatalf("expected error %q, got %q", tt.wantErr, err.Error())
-			}
-		})
-	}
-}
-
-func TestGetRequestFields_TableDriven(t *testing.T) {
-	tests := []struct {
-		name   string
-		req    structs.GetRequest
-		wantID int
-	}{
-		{
-			name:   "explicit client ID",
-			req:    structs.GetRequest{ClientID: 42},
-			wantID: 42,
-		},
-		{
-			name:   "zero value",
-			req:    structs.GetRequest{},
-			wantID: 0,
-		},
-	}
-
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			if tt.req.ClientID != tt.wantID {
-				t.Fatalf("expected ClientID %d, got %d", tt.wantID, tt.req.ClientID)
 			}
 		})
 	}

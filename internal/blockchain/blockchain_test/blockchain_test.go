@@ -10,13 +10,14 @@ import (
 	"testing"
 )
 
+// TestBuildBlock_TableDriven covers block construction behavior.
 func TestBuildBlock_TableDriven(t *testing.T) {
 	tests := []struct {
 		name string
 		run  func(t *testing.T)
 	}{
 		{
-			name: "produces valid hash ending",
+			name: "TC_UT_BCH_001 produces valid hash ending",
 			run: func(t *testing.T) {
 				txns := []structs.Transaction{
 					{ID: 1, ClientID: 1, Payload: "2 100", Term: 1},
@@ -34,7 +35,7 @@ func TestBuildBlock_TableDriven(t *testing.T) {
 			},
 		},
 		{
-			name: "uses zero prev hash for genesis",
+			name: "TC_UT_BCH_002 uses zero prev hash for genesis",
 			run: func(t *testing.T) {
 				block := blockchain.BuildBlock(nil, []structs.Transaction{{ID: 1, ClientID: 1, Payload: "2 10", Term: 0}}, 0)
 				if block.PrevHash != "0" {
@@ -43,7 +44,7 @@ func TestBuildBlock_TableDriven(t *testing.T) {
 			},
 		},
 		{
-			name: "links next block to previous hash",
+			name: "TC_UT_BCH_003 links next block to previous hash",
 			run: func(t *testing.T) {
 				txns1 := []structs.Transaction{
 					{ID: 1, ClientID: 1, Payload: "2 10", Term: 1},
@@ -65,7 +66,7 @@ func TestBuildBlock_TableDriven(t *testing.T) {
 			},
 		},
 		{
-			name: "stores copy of input transactions",
+			name: "TC_UT_BCH_004 stores copy of input transactions",
 			run: func(t *testing.T) {
 				txns := []structs.Transaction{
 					{ID: 1, ClientID: 1, Payload: "original", Term: 1},
@@ -80,7 +81,7 @@ func TestBuildBlock_TableDriven(t *testing.T) {
 			},
 		},
 		{
-			name: "hash is reproducible from block data",
+			name: "TC_UT_BCH_005 hash is reproducible from block data",
 			run: func(t *testing.T) {
 				txns := []structs.Transaction{
 					{ID: 1, ClientID: 1, Payload: "2 10", Term: 1},
@@ -110,6 +111,7 @@ func TestBuildBlock_TableDriven(t *testing.T) {
 	}
 }
 
+// TestBalances_TableDriven covers committed and pending balance behavior.
 func TestBalances_TableDriven(t *testing.T) {
 	seed := []structs.Transaction{
 		{ClientID: 0, Payload: "1 500", Term: 0},
@@ -121,27 +123,29 @@ func TestBalances_TableDriven(t *testing.T) {
 
 	tests := []struct {
 		name          string
+		useEmptyChain bool
 		clientID      int
 		uncommitted   []structs.Transaction
 		wantCommitted int
 		wantPending   int
 	}{
 		{
-			name:          "empty chain committed balance",
+			name:          "TC_UT_BCH_006 empty chain committed balance",
+			useEmptyChain: true,
 			clientID:      1,
 			uncommitted:   nil,
 			wantCommitted: blockchain.GetCommittedBalance(nil, 1),
 			wantPending:   blockchain.GetPendingBalance(nil, nil, 1),
 		},
 		{
-			name:          "seeded committed balance",
+			name:          "TC_UT_BCH_007 seeded committed balance",
 			clientID:      1,
 			uncommitted:   nil,
 			wantCommitted: 500,
 			wantPending:   500,
 		},
 		{
-			name:     "pending includes uncommitted transfer",
+			name:     "TC_UT_BCH_008 pending includes uncommitted transfer",
 			clientID: 1,
 			uncommitted: []structs.Transaction{
 				{ClientID: 1, Payload: "2 100", Term: 1},
@@ -155,7 +159,7 @@ func TestBalances_TableDriven(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			localChain := chain
-			if strings.Contains(tt.name, "empty chain") {
+			if tt.useEmptyChain {
 				localChain = nil
 			}
 			gotCommitted := blockchain.GetCommittedBalance(localChain, tt.clientID)
@@ -170,6 +174,7 @@ func TestBalances_TableDriven(t *testing.T) {
 	}
 }
 
+// TestLoadFirstBlockchain_TableDriven covers seed-chain loading behavior.
 func TestLoadFirstBlockchain_TableDriven(t *testing.T) {
 	makeSeedFile := func(t *testing.T, contents string) string {
 		t.Helper()
@@ -187,19 +192,19 @@ func TestLoadFirstBlockchain_TableDriven(t *testing.T) {
 		wantBlocks int
 	}{
 		{
-			name:       "missing file returns error",
+			name:       "TC_UT_BCH_009 missing file returns error",
 			path:       "/nonexistent/path.txt",
 			wantErr:    true,
 			wantBlocks: 0,
 		},
 		{
-			name:       "parses seed file",
+			name:       "TC_UT_BCH_010 parses seed file",
 			path:       makeSeedFile(t, "0 1 1000\n0 2 1000\n0 3 1000\n"),
 			wantErr:    false,
 			wantBlocks: 1,
 		},
 		{
-			name:       "ignores comments in seed file",
+			name:       "TC_UT_BCH_011 ignores comments in seed file",
 			path:       makeSeedFile(t, "# seed file\n\n0 1 1000\n# ignore\n0 2 1000\n0 3 1000\n"),
 			wantErr:    false,
 			wantBlocks: 1,
@@ -232,6 +237,7 @@ func TestLoadFirstBlockchain_TableDriven(t *testing.T) {
 	}
 }
 
+// TestPrintChain_TableDriven covers chain rendering behavior.
 func TestPrintChain_TableDriven(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -239,7 +245,7 @@ func TestPrintChain_TableDriven(t *testing.T) {
 		check func(t *testing.T, out string)
 	}{
 		{
-			name:  "empty chain",
+			name:  "TC_UT_BCH_012 empty chain",
 			chain: nil,
 			check: func(t *testing.T, out string) {
 				if out != "[]" {
@@ -248,7 +254,7 @@ func TestPrintChain_TableDriven(t *testing.T) {
 			},
 		},
 		{
-			name: "non empty chain",
+			name: "TC_UT_BCH_013 non empty chain",
 			chain: func() []structs.Block {
 				txns := []structs.Transaction{
 					{ClientID: 1, Payload: "2 10", Term: 3},

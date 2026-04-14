@@ -7,13 +7,14 @@ import (
 	"testing"
 )
 
+// TestMemoryStoreBehavior_TableDriven covers memory store behavior.
 func TestMemoryStoreBehavior_TableDriven(t *testing.T) {
 	tests := []struct {
 		name string
 		run  func(t *testing.T, s *store.MemoryStore)
 	}{
 		{
-			name: "append and get by id",
+			name: "TC_UT_STR_001 append and get by id",
 			run: func(t *testing.T, s *store.MemoryStore) {
 				txn := structs.Transaction{ClientID: 99, Payload: "A->B 10", Timestamp: 123456789}
 				if err := s.Append(txn); err != nil {
@@ -32,7 +33,7 @@ func TestMemoryStoreBehavior_TableDriven(t *testing.T) {
 			},
 		},
 		{
-			name: "get all returns all indexes",
+			name: "TC_UT_STR_002 get all returns all indexes",
 			run: func(t *testing.T, s *store.MemoryStore) {
 				_ = s.Append(structs.Transaction{ClientID: 1, Payload: "A->B 10"})
 				_ = s.Append(structs.Transaction{ClientID: 2, Payload: "C->D 20"})
@@ -49,7 +50,7 @@ func TestMemoryStoreBehavior_TableDriven(t *testing.T) {
 			},
 		},
 		{
-			name: "get by id not found",
+			name: "TC_UT_STR_003 get by id not found",
 			run: func(t *testing.T, s *store.MemoryStore) {
 				if _, err := s.GetByID(999); err == nil {
 					t.Fatalf("expected error for missing key, got nil")
@@ -57,7 +58,7 @@ func TestMemoryStoreBehavior_TableDriven(t *testing.T) {
 			},
 		},
 		{
-			name: "sequential indexing overrides caller id",
+			name: "TC_UT_STR_004 sequential indexing overrides caller id",
 			run: func(t *testing.T, s *store.MemoryStore) {
 				for i := 0; i < 5; i++ {
 					_ = s.Append(structs.Transaction{ID: 999, ClientID: i + 1, Payload: "x"})
@@ -75,7 +76,7 @@ func TestMemoryStoreBehavior_TableDriven(t *testing.T) {
 			},
 		},
 		{
-			name: "get all returns copy",
+			name: "TC_UT_STR_005 get all returns copy",
 			run: func(t *testing.T, s *store.MemoryStore) {
 				_ = s.Append(structs.Transaction{ClientID: 1, Payload: "original"})
 				copy1 := s.GetAll()
@@ -87,7 +88,7 @@ func TestMemoryStoreBehavior_TableDriven(t *testing.T) {
 			},
 		},
 		{
-			name: "first index is one",
+			name: "TC_UT_STR_006 first index is one",
 			run: func(t *testing.T, s *store.MemoryStore) {
 				_ = s.Append(structs.Transaction{ClientID: 5, Payload: "first"})
 				got, err := s.GetByID(1)
@@ -110,6 +111,7 @@ func TestMemoryStoreBehavior_TableDriven(t *testing.T) {
 	}
 }
 
+// TestMemoryStoreConcurrency_TableDriven covers memory store concurrency behavior.
 func TestMemoryStoreConcurrency_TableDriven(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -118,7 +120,7 @@ func TestMemoryStoreConcurrency_TableDriven(t *testing.T) {
 		expectedSize int
 	}{
 		{
-			name:         "parallel readers and writers",
+			name:         "TC_UT_STR_007 parallel readers and writers",
 			writers:      100,
 			readers:      50,
 			expectedSize: 100,

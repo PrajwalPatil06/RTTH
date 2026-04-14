@@ -52,6 +52,7 @@ func doGet(router *gin.Engine, path string) *httptest.ResponseRecorder {
 	return w
 }
 
+// TestHandleAppendTransactionReq_TableDriven covers append endpoint behavior.
 func TestHandleAppendTransactionReq_TableDriven(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -61,7 +62,7 @@ func TestHandleAppendTransactionReq_TableDriven(t *testing.T) {
 		wantLocation string
 	}{
 		{
-			name: "leader accepts valid append",
+			name: "TC_UT_HDL_001 leader accepts valid append",
 			setup: func(n *domain.Node) {
 				n.State = "Leader"
 			},
@@ -69,7 +70,7 @@ func TestHandleAppendTransactionReq_TableDriven(t *testing.T) {
 			wantCode: http.StatusOK,
 		},
 		{
-			name: "follower redirects to leader",
+			name: "TC_UT_HDL_002 follower redirects to leader",
 			setup: func(n *domain.Node) {
 				n.State = "Follower"
 				n.LeaderId = 1
@@ -80,7 +81,7 @@ func TestHandleAppendTransactionReq_TableDriven(t *testing.T) {
 			wantLocation: "http://localhost:8081/append",
 		},
 		{
-			name: "candidate returns unavailable",
+			name: "TC_UT_HDL_003 candidate returns unavailable",
 			setup: func(n *domain.Node) {
 				n.State = "Candidate"
 			},
@@ -88,7 +89,7 @@ func TestHandleAppendTransactionReq_TableDriven(t *testing.T) {
 			wantCode: http.StatusServiceUnavailable,
 		},
 		{
-			name: "leader rejects malformed json",
+			name: "TC_UT_HDL_004 leader rejects malformed json",
 			setup: func(n *domain.Node) {
 				n.State = "Leader"
 			},
@@ -117,6 +118,7 @@ func TestHandleAppendTransactionReq_TableDriven(t *testing.T) {
 	}
 }
 
+// TestRaftRPCHandlers_TableDriven covers Raft RPC handler behavior.
 func TestRaftRPCHandlers_TableDriven(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -127,7 +129,7 @@ func TestRaftRPCHandlers_TableDriven(t *testing.T) {
 		check    func(t *testing.T, node *domain.Node, body []byte)
 	}{
 		{
-			name:     "append entries heartbeat succeeds",
+			name:     "TC_UT_HDL_005 append entries heartbeat succeeds",
 			path:     "/appendentries",
 			body:     `{"term":1,"leaderid":2,"prevlogindex":0,"prevlogterm":0,"entries":[],"leadercommit":0}`,
 			setup:    func(n *domain.Node) {},
@@ -135,7 +137,7 @@ func TestRaftRPCHandlers_TableDriven(t *testing.T) {
 			check:    func(t *testing.T, node *domain.Node, body []byte) {},
 		},
 		{
-			name:     "vote request stale term rejected",
+			name:     "TC_UT_HDL_006 vote request stale term rejected",
 			path:     "/requestvote",
 			body:     `{"term":3,"candidateid":2,"lastlogindex":0,"lastlogterm":0,"timestamp":0}`,
 			setup:    func(n *domain.Node) { n.CurrentTerm = 5 },
@@ -149,7 +151,7 @@ func TestRaftRPCHandlers_TableDriven(t *testing.T) {
 			},
 		},
 		{
-			name:     "vote request malformed json",
+			name:     "TC_UT_HDL_007 vote request malformed json",
 			path:     "/requestvote",
 			body:     `bad`,
 			setup:    func(n *domain.Node) {},
@@ -175,6 +177,7 @@ func TestRaftRPCHandlers_TableDriven(t *testing.T) {
 	}
 }
 
+// TestReadHandlers_TableDriven covers read-oriented handler behavior.
 func TestReadHandlers_TableDriven(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -185,7 +188,7 @@ func TestReadHandlers_TableDriven(t *testing.T) {
 		wantCode int
 	}{
 		{
-			name:   "get user details found",
+			name:   "TC_UT_HDL_008 get user details found",
 			method: http.MethodPost,
 			path:   "/getuserdetails",
 			body:   `{"clientid":1}`,
@@ -195,7 +198,7 @@ func TestReadHandlers_TableDriven(t *testing.T) {
 			wantCode: http.StatusOK,
 		},
 		{
-			name:     "get user details missing",
+			name:     "TC_UT_HDL_009 get user details missing",
 			method:   http.MethodPost,
 			path:     "/getuserdetails",
 			body:     `{"clientid":999}`,
@@ -203,7 +206,7 @@ func TestReadHandlers_TableDriven(t *testing.T) {
 			wantCode: http.StatusNotFound,
 		},
 		{
-			name:   "get all user details",
+			name:   "TC_UT_HDL_010 get all user details",
 			method: http.MethodGet,
 			path:   "/getalluserdetails",
 			setup: func(s *store.MemoryStore, n *domain.Node) {
@@ -212,7 +215,7 @@ func TestReadHandlers_TableDriven(t *testing.T) {
 			wantCode: http.StatusOK,
 		},
 		{
-			name:     "balance missing client id",
+			name:     "TC_UT_HDL_011 balance missing client id",
 			method:   http.MethodPost,
 			path:     "/balance",
 			body:     `{"clientid":0}`,
@@ -220,7 +223,7 @@ func TestReadHandlers_TableDriven(t *testing.T) {
 			wantCode: http.StatusBadRequest,
 		},
 		{
-			name:     "blockchain endpoint returns array",
+			name:     "TC_UT_HDL_012 blockchain endpoint returns array",
 			method:   http.MethodGet,
 			path:     "/blockchain",
 			setup:    func(s *store.MemoryStore, n *domain.Node) {},
@@ -248,6 +251,7 @@ func TestReadHandlers_TableDriven(t *testing.T) {
 	}
 }
 
+// TestHandleTransfer_TableDriven covers transfer endpoint behavior.
 func TestHandleTransfer_TableDriven(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -257,7 +261,7 @@ func TestHandleTransfer_TableDriven(t *testing.T) {
 		wantLocation string
 	}{
 		{
-			name: "leader accepts valid transfer",
+			name: "TC_UT_HDL_013 leader accepts valid transfer",
 			setup: func(n *domain.Node) {
 				n.Mu.Lock()
 				n.State = "Leader"
@@ -280,7 +284,7 @@ func TestHandleTransfer_TableDriven(t *testing.T) {
 			wantCode: http.StatusOK,
 		},
 		{
-			name: "follower redirects transfer",
+			name: "TC_UT_HDL_014 follower redirects transfer",
 			setup: func(n *domain.Node) {
 				n.Mu.Lock()
 				n.State = "Follower"
@@ -293,7 +297,7 @@ func TestHandleTransfer_TableDriven(t *testing.T) {
 			wantLocation: "http://localhost:8081/transfer",
 		},
 		{
-			name: "candidate returns unavailable",
+			name: "TC_UT_HDL_015 candidate returns unavailable",
 			setup: func(n *domain.Node) {
 				n.Mu.Lock()
 				n.State = "Candidate"
@@ -303,7 +307,7 @@ func TestHandleTransfer_TableDriven(t *testing.T) {
 			wantCode: http.StatusServiceUnavailable,
 		},
 		{
-			name: "invalid transfer payload",
+			name: "TC_UT_HDL_016 invalid transfer payload",
 			setup: func(n *domain.Node) {
 				n.Mu.Lock()
 				n.State = "Leader"
