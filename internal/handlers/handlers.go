@@ -119,6 +119,7 @@ func (h *Handler) GetAllUserDetails(c *gin.Context) {
 
 // HandleTransfer performs transfer submission through RAFT and returns commit and balance results.
 func (h *Handler) HandleTransfer(c *gin.Context) {
+	start := time.Now()
 	var txn structs.ClientTransaction
 	if err := c.ShouldBindJSON(&txn); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -142,12 +143,24 @@ func (h *Handler) HandleTransfer(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+		commitWaitStart := time.Now()
 		committed := node.WaitForCommit(idx, 3*time.Second)
+		commitWaitMs := time.Since(commitWaitStart).Milliseconds()
 		committedBal, pendingBal := node.GetBalance(txn.ClientID)
+		endToEndMs := int64(0)
+		if txn.Timestamp > 0 {
+			endToEndMs = time.Now().UnixMilli() - txn.Timestamp
+			if endToEndMs < 0 {
+				endToEndMs = 0
+			}
+		}
 		c.JSON(http.StatusOK, gin.H{
-			"committed":         committed,
-			"committed_balance": committedBal,
-			"pending_balance":   pendingBal,
+			"committed":             committed,
+			"committed_balance":     committedBal,
+			"pending_balance":       pendingBal,
+			"commit_wait_ms":        commitWaitMs,
+			"processing_latency_ms": time.Since(start).Milliseconds(),
+			"end_to_end_latency_ms": endToEndMs,
 		})
 
 	case "Follower":
@@ -164,6 +177,7 @@ func (h *Handler) HandleTransfer(c *gin.Context) {
 
 // HandleBalance performs balance lookup for a client and returns committed and pending values.
 func (h *Handler) HandleBalance(c *gin.Context) {
+	start := time.Now()
 	var req structs.GetRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -175,9 +189,10 @@ func (h *Handler) HandleBalance(c *gin.Context) {
 	}
 	committedBal, pendingBal := h.RaftNode.GetBalance(req.ClientID)
 	c.JSON(http.StatusOK, gin.H{
-		"client_id":         req.ClientID,
-		"committed_balance": committedBal,
-		"pending_balance":   pendingBal,
+		"client_id":             req.ClientID,
+		"committed_balance":     committedBal,
+		"pending_balance":       pendingBal,
+		"processing_latency_ms": time.Since(start).Milliseconds(),
 	})
 }
 
